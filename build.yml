@@ -1,0 +1,58 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:  # 手动触发，在Actions页面点"Run workflow"
+  push:
+    branches: [ main ]
+    paths:
+      - '**.py'
+      - 'buildozer.spec'
+      - '.github/workflows/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Buildozer (SDK/NDK等大文件加速)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.cache/pip
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git zip unzip openjdk-17-jdk \
+            autoconf libtool pkg-config cmake \
+            python3-pip python3-dev \
+            libffi-dev zlib1g-dev libssl-dev
+          python3 -m pip install --upgrade pip
+          pip3 install --user buildozer cython==0.29.37
+
+      - name: 编译 APK
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          buildozer android debug 2>&1 | tee build.log
+
+      - name: 上传 APK 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: BarcodePDF-APK
+          path: bin/*.apk
+          retention-days: 30
+
+      - name: 上传构建日志（失败时用于排查）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
